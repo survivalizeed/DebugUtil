@@ -6,11 +6,11 @@ int main() {
 	debugger.wait_for_process(nullptr, 10);
 	debugger.wait_for_module("MODULE_X", 10);
 
-	auto license_address = debugger.find_signature("MODULE_X", "\x89\x68\x18", "xxx");
+	auto address = debugger.find_signature("MODULE_X", "\x89\x68\x18", "xxx");
 
 	debugger.attach();
 
-	debugger.set_hardware_breakpoint(license_address, DEBUG_UTIL::HWBP::HARDWARE_BREAKPOINT_1);
+	debugger.set_hardware_breakpoint(address, DEBUG_UTIL::HWBP::HARDWARE_BREAKPOINT_1);
 
 	while (debugger.is_attached()) {
 		debugger.wait_for_debug_event();
