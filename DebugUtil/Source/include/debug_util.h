@@ -34,6 +34,7 @@ namespace DEBUG_UTIL {
 		DEBUG_EVENT debug_event;
 		DWORD continue_status;
 
+		bool attached = false;
 		uintptr_t hardware_bp1, hardware_bp2, hardware_bp3, hardware_bp4;
 		std::map<uintptr_t, BYTE> software_breakpoints;
 		uintptr_t current_software_breakpoint_hit = 0;
@@ -91,7 +92,7 @@ namespace DEBUG_UTIL {
 	public:
 
 		DBG(const std::string& name) {
-			process.name = name;
+			process.name = to_lower(name);
 			__get_process();
 			__get_module(process.name);
 		}
@@ -104,8 +105,9 @@ namespace DEBUG_UTIL {
 
 		void wait_for_process(void(*display_callback)(void), DWORD intervall) {
 			for (;;) {
-				display_callback();
-				__get_process();
+				if(display_callback != nullptr)
+					display_callback();
+				if (__get_process()) break;
 				Sleep(intervall);
 			}
 		}
@@ -117,6 +119,13 @@ namespace DEBUG_UTIL {
 				return true;
 			}
 			return false;
+		}
+
+		void wait_for_module(const std::string& name, DWORD intervall) {
+			for (;;) {
+				if (add_module(name)) break;
+				Sleep(intervall);
+			}
 		}
 
 		std::optional<Module> get_module(const std::string& name) {
@@ -175,32 +184,40 @@ namespace DEBUG_UTIL {
 		template <typename type>
 			requires std::is_integral_v<type> || std::is_floating_point_v<type>
 		bool write_memory(uintptr_t address, type Value) {
-			return WriteProcessMemory(TargetProcess, (LPVOID)Address, &Value, sizeof(var), 0);
+			return WriteProcessMemory(process.handle, (LPVOID)address, &Value, sizeof(type), 0);
 		}
 	
 		template <typename type>
 			requires std::is_integral_v<type> || std::is_floating_point_v<type>
-		type read_memory(uintptr_t Address) {
+		type read_memory(uintptr_t address) {
 			type value;
-			ReadProcessMemory(TargetProcess, (LPCVOID)Address, &value, sizeof(var), NULL);
+			ReadProcessMemory(process.handle, (LPCVOID)address, &value, sizeof(type), NULL);
 			return value;
 		}
 
 		// Debugger section
 
-		bool attach() const {
-			if (DebugActiveProcess(process.id))
+		bool attach() {
+			if (DebugActiveProcess(process.id)) {
+				attached = true;
 				return true;
+			}
 			return false;
 		}
 
-		bool detach() const {
-			if (DebugActiveProcessStop(process.id))
+		bool detach() {
+			if (DebugActiveProcessStop(process.id)) {
+				attached = false;
 				return true;
+			}
 			return false;
 		}
 
-		bool set_hardware_breakpoint(uintptr_t address, HWBP hwbp) {
+		bool is_attached() const{
+			return attached;
+		}
+
+		void set_hardware_breakpoint(uintptr_t address, HWBP hwbp) {
 			HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
 			THREADENTRY32 te;
 			te.dwSize = sizeof(THREADENTRY32);
@@ -251,7 +268,7 @@ namespace DEBUG_UTIL {
 			CloseHandle(hSnapshot);
 		}
 
-		bool remove_hardware_breakpoint(HWBP hwbp) {
+		void remove_hardware_breakpoint(HWBP hwbp) {
 			HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
 			THREADENTRY32 te;
 			te.dwSize = sizeof(THREADENTRY32);
@@ -409,6 +426,7 @@ namespace DEBUG_UTIL {
 		}
 
 		DEBUG_EVENT wait_for_debug_event() {
+			continue_status = DBG_CONTINUE;
 			if (WaitForDebugEvent(&debug_event, INFINITE) == 0)
 				detach();
 			if (debug_event.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT)

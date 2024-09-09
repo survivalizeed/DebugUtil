@@ -131,7 +131,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Source\main.cpp" />
+    <ClCompile Include="Source\example.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\include\debug_util.h" />
